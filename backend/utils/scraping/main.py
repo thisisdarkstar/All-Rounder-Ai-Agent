@@ -6,14 +6,11 @@ Run this file directly to see the examples in action.
 """
 
 import asyncio
-import json
 from pathlib import Path
-from typing import List, Optional
 
 # Import from the package
 from backend.utils.scraping.search import search, search_images, SearchManager, SearchOptions
-from backend.utils.scraping.fetcher import fetch_webpage, download_file, download_image
-from backend.utils.scraping.models import SearchResult
+from backend.utils.scraping.fetcher import fetch_webpage, download_file
 
 async def example_web_search():
     """Example of performing a web search."""

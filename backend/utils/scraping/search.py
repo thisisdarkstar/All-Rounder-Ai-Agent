@@ -5,25 +5,22 @@ This module provides functionality to search the web, images, and files using mu
 with proper rate limiting, retries, and error handling.
 """
 import asyncio
-import logging
 import random
 import time
-from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, TypeVar, Generic, Type, cast
-from urllib.parse import quote_plus, urlparse, parse_qs, urljoin
+from typing import Any, Dict, List, Optional, TypeVar
+from urllib.parse import quote_plus
 
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
-from ddgs import DDGS, AsyncDDGS
+from ddgs import DDGS
 from tqdm import tqdm
 
-from .models import SearchResult, WebPage
+from .models import SearchResult
 from .logger import get_logger
-from .fetcher import download_file, fetch_webpage
 
 # Type variable for generic return types
 T = TypeVar('T')

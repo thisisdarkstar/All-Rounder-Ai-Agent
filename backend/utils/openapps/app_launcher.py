@@ -11,7 +11,7 @@ import subprocess
 import logging
 import argparse
 from pathlib import Path
-from typing import Optional, List, Union
+from typing import Optional, List
 from dataclasses import dataclass
 
 # Configure logging

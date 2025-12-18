@@ -11,13 +11,12 @@ import json
 import socket
 import ssl
 from urllib.parse import urlparse, urljoin, urlunparse, parse_qs, urlencode
-from typing import Optional, Dict, Any, List, Tuple, Union, Set
+from typing import Optional, Any, List, Tuple
 from dataclasses import asdict, is_dataclass
 from functools import wraps
 from contextlib import asynccontextmanager
 import backoff
 from fake_useragent import UserAgent
-import aiohttp_socks
 from bs4 import BeautifulSoup
 import tldextract
 

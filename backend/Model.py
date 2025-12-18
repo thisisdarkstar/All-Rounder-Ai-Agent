@@ -1,11 +1,10 @@
 from __future__ import annotations
-from typing import Dict, List, Any, Optional, TypedDict
+from typing import List, TypedDict
 from pathlib import Path
 import json
 import logging
 import os
-from dataclasses import dataclass
-from openai import OpenAI, APIError, APITimeoutError
+from openai import OpenAI
 from dotenv import load_dotenv
 from backend.utils.prompts import preamble, FEWSHOTS
 
@@ -167,62 +166,126 @@ def classify_query(prompt: str) -> List[str]:
         logger.warning("Empty or invalid prompt provided to classify_query")
         return ["general"]
     
-    # Prepare messages with system prompt and few-shot examples
-    messages: List[ChatMessage] = [
-        {"role": "system", "content": preamble},
-        *FEWSHOTS,
-        {"role": "user", "content": prompt}
+    # Pre-process the prompt for better classification
+    prompt_lower = prompt.lower().strip()
+    
+    # Check for common system commands first (fast path)
+    system_commands = {
+        'mute': 'system mute',
+        'unmute': 'system unmute',
+        'volume up': 'system increase volume',
+        'volume down': 'system decrease volume',
+        'turn up the volume': 'system increase volume',
+        'turn down the volume': 'system decrease volume',
+        'increase volume': 'system increase volume',
+        'decrease volume': 'system decrease volume',
+        'brightness up': 'system increase brightness',
+        'brightness down': 'system decrease brightness',
+        'exit': 'system exit',
+        'shutdown': 'system shutdown',
+        'restart': 'system restart',
+        'lock': 'system lock',
+    }
+    
+    for cmd, response in system_commands.items():
+        if cmd in prompt_lower:
+            logger.debug(f"Matched system command: {cmd}")
+            return [response]
+    
+    # Handle YouTube searches first
+    if 'youtube' in prompt_lower and ('search' in prompt_lower or 'find' in prompt_lower):
+        query = prompt_lower.replace('search', '').replace('find', '').replace('youtube', '').strip()
+        return [f'youtube search {query}']
+
+    # Handle multiple commands (comma or 'and' separated)
+    if ',' in prompt_lower or ' and ' in prompt_lower:
+        # Normalize the input by replacing ' and ' with comma and then split by comma
+        normalized = prompt_lower.replace(' and ', ',').split(',')
+        parts = [p.strip() for p in normalized if p.strip()]
+        
+        if len(parts) > 1:
+            result = []
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                    
+                # Process each part through classify_query to handle individual commands
+                if part.startswith(('open ', 'launch ')):
+                    app = part.replace('open', '').replace('launch', '').strip()
+                    if app:
+                        result.append(f'open {app}')
+                elif part.startswith('close '):
+                    app = part.replace('close', '').strip()
+                    if app:
+                        result.append(f'close {app}')
+                else:
+                    # Default to open if no command specified
+                    result.append(f'open {part}')
+            
+            return result if result else ['general']
+
+    # Handle single open/close commands
+    if prompt_lower.startswith(('open ', 'launch ')):
+        app = prompt_lower.replace('open', '').replace('launch', '').strip()
+        return [f'open {app}'] if app else ['general']
+    elif prompt_lower.startswith('close '):
+        app = prompt_lower.replace('close', '').strip()
+        return [f'close {app}'] if app else ['general']
+
+    # Check for common real-time queries
+    realtime_indicators = [
+        'who is', 'who are', 'current', 'today', 'now', 'latest', 'right now',
+        'recent', 'newest', 'happening now', 'live', 'aqi', 'temperature',
+        'weather', 'news', 'update', 'stock', 'price', 'time', 'date'
     ]
     
-    # Make API request with retries
-    for attempt in range(CONFIG["max_retries"]):
-        try:
-            result = client.chat.completions.create(
-                model=CONFIG["model_name"],
-                messages=messages,
-                temperature=0.2,
-                max_tokens=100,
-            )
-            
-            # Process the response
-            content = result.choices[0].message.content
-            if not content:
-                logger.warning("Empty response from LLM")
-                return ["general"]
-                
-            # Parse and validate response
-            output = [s.strip() for s in content.replace("\n", "").split(",") if s.strip()]
-            output = normalize_response(output)
-            
-            # Filter valid responses
-            valid_responses = [
-                task for task in output 
-                if any(task.startswith(known) for known in KNOWN_TYPES)
-            ]
-            
-            # Log the classification result
-            if CONFIG["log_enabled"]:
-                save_chat_log([{"role": "user", "content": prompt}])
-                
-            return valid_responses or ["general"]
-            
-        except APITimeoutError:
-            if attempt == CONFIG["max_retries"] - 1:
-                logger.error("API request timed out after retries")
-                raise RuntimeError("Service unavailable. Please try again later.")
-            logger.warning(f"API timeout, retrying... (attempt {attempt + 1}/{CONFIG['max_retries']})")
-            
-        except APIError as e:
-            logger.error(f"API error: {e}")
-            raise RuntimeError(f"Error communicating with the AI service: {e}")
-            
-        except Exception as e:
-            logger.error(f"Unexpected error in classify_query: {e}")
-            if attempt == CONFIG["max_retries"] - 1:
-                raise RuntimeError("An unexpected error occurred. Please try again.")
+    if any(indicator in prompt_lower for indicator in realtime_indicators):
+        return [f'realtime {prompt_lower}']
     
-    # If all retries failed
-    return ["general"]
+    # Use LLM for more complex classification
+    try:
+        messages: List[ChatMessage] = [
+            {"role": "system", "content": preamble},
+            *FEWSHOTS,
+            {"role": "user", "content": prompt}
+        ]
+        
+        result = client.chat.completions.create(
+            model=CONFIG["model_name"],
+            messages=messages,
+            temperature=0.1,  # Lower temperature for more consistent results
+            max_tokens=50,
+        )
+        
+        content = result.choices[0].message.content
+        if not content:
+            logger.warning("Empty response from LLM")
+            return ["general"]
+            
+        # Parse and clean the response
+        output = []
+        for s in content.split(','):
+            s = s.strip().lower()
+            if not s:
+                continue
+                
+            # Map to canonical form if exists
+            s = CANONICAL_MAP.get(s, s)
+            
+            # Only keep known intents
+            if any(s.startswith(known) for known in KNOWN_TYPES):
+                output.append(s)
+        
+        if not output:
+            logger.warning(f"No valid intents found in response: {content}")
+            return ["general"]
+            
+        return output
+        
+    except Exception as e:
+        logger.error(f"Error in classify_query: {e}")
+        return ["general"]
 
 
 # Optional: CLI/test mode

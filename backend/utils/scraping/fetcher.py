@@ -4,17 +4,16 @@ Web page and file fetching functionality.
 import os
 import requests
 from pathlib import Path
-from typing import Optional, Dict, List, Any, Union, Tuple
+from typing import Optional, Dict, Union
 from urllib.parse import urlparse, urljoin
 from datetime import datetime
 
 from bs4 import BeautifulSoup
 from tqdm import tqdm
-import logging
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .models import WebPage, SearchResult
+from .models import WebPage
 from .logger import get_logger
 
 logger = get_logger(__name__)

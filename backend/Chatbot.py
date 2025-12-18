@@ -1,22 +1,38 @@
 import os
 import json
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict
 from pathlib import Path
 from datetime import datetime
 from openai import OpenAI, APIError, APITimeoutError
 from dotenv import load_dotenv
-from utils.prompts import FRIDAY_PERSONA
+from backend.utils.prompts import FRIDAY_PERSONA
 
 # Configure logging
+log_dir = Path('backend/logs')
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / 'Chatbot_history.json'
+
+# Clear any existing handlers
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+# Configure root logger to only write to our log file
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('chatbot.log'),
-        logging.StreamHandler()
+        logging.FileHandler(log_file, encoding='utf-8'),
     ]
 )
+
+# Configure httpx logger to use our handler
+httpx_logger = logging.getLogger('httpx')
+httpx_logger.handlers.clear()
+httpx_logger.addHandler(logging.FileHandler(log_file, encoding='utf-8'))
+httpx_logger.propagate = False
+
+# Get logger for this module
 logger = logging.getLogger(__name__)
 
 # Load environment variables

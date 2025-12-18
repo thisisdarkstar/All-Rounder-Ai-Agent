@@ -2,9 +2,7 @@
 Logging configuration for the scraping package.
 """
 import logging
-import os
 from pathlib import Path
-from typing import Optional
 
 # Set up the main logs directory (in the project root)
 LOG_DIR = Path(__file__).parent.parent.parent.parent / 'logs'
